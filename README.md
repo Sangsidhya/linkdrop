@@ -1,4 +1,4 @@
-# LinkDrop (made with ClaudeAI)
+# LinkDrop 
 
 AirDrop-style sharing between **Windows** and **Android** over the same Wi-Fi or phone hotspot.
 
