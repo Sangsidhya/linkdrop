@@ -1,0 +1,24 @@
+name: linkdrop
+description: AirDrop-style file, text and clipboard sharing between Windows and Android over local Wi-Fi or hotspot.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  basic_utils: any
+  pointycastle: any
+  crypto: any
+  path_provider: any
+  file_picker: any
+  desktop_drop: any
+  clipboard_watcher: any
+  qr_flutter: any
+  mobile_scanner: any
+  permission_handler: any
+
+flutter:
+  uses-material-design: true
