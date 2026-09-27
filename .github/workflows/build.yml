@@ -1,0 +1,116 @@
+name: Build LinkDrop
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to publish GitHub Releases on version tags
+
+jobs:
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate standard Android platform files (keeps our files)
+        run: |
+          flutter create --org com.example --project-name linkdrop --platforms android .
+          rm -f test/widget_test.dart
+
+      - name: Set minSdk to 26 (Android 8.0+)
+        run: |
+          for f in android/app/build.gradle.kts android/app/build.gradle; do
+            [ -f "$f" ] && sed -i -E 's/minSdk(Version)? *=? *flutter\.minSdkVersion/minSdk = 26/' "$f"
+          done
+          grep -rn "minSdk = 26" android/app/ || (echo "Could not set minSdk — template changed" && exit 1)
+
+      - name: Use stable signing key (optional secret)
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_DEBUG_KEYSTORE }}
+        run: |
+          if [ -n "$KEYSTORE" ]; then
+            mkdir -p ~/.android
+            echo "$KEYSTORE" | base64 -d > ~/.android/debug.keystore
+            echo "Using stable signing key from secrets."
+          else
+            echo "::warning::No ANDROID_DEBUG_KEYSTORE secret — APK gets a new random key each build (see README)."
+          fi
+
+      - run: flutter pub get
+      - run: flutter build apk --release
+
+      - name: Rename APK
+        run: cp build/app/outputs/flutter-apk/app-release.apk linkdrop-android.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linkdrop-android
+          path: linkdrop-android.apk
+
+  windows:
+    name: Windows app
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate standard Windows platform files
+        shell: pwsh
+        run: |
+          flutter create --org com.example --project-name linkdrop --platforms windows .
+          Remove-Item -ErrorAction SilentlyContinue test/widget_test.dart
+
+      - name: Window title and size
+        shell: pwsh
+        run: |
+          $f = "windows/runner/main.cpp"
+          (Get-Content $f) `
+            -replace 'L"linkdrop"', 'L"LinkDrop"' `
+            -replace 'Size size\(1280, 720\)', 'Size size(960, 780)' |
+            Set-Content $f
+
+      - run: flutter pub get
+      - run: flutter build windows --release
+
+      - name: Zip app
+        shell: pwsh
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath linkdrop-windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linkdrop-windows
+          path: linkdrop-windows.zip
+
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
